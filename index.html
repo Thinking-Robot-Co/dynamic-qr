@@ -15,7 +15,7 @@
             position: fixed;
             bottom: 20px;
             left: 50%;
-            transform: translateX(-50%);
+            transform: translateX(-50%) translateY(100%); /* Start off-screen */
             padding: 12px 20px;
             border-radius: 8px;
             color: white;
@@ -33,110 +33,6 @@
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col items-center justify-center p-4">
-
-    <script type="module">
-        // Import the functions you need from the SDKs you need
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
-
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", // Replace with your actual API key if different
-            authDomain: "dynamic-qr-bb507.firebaseapp.com",
-            projectId: "dynamic-qr-bb507",
-            storageBucket: "dynamic-qr-bb507.firebasestorage.app", // Corrected from .firebasestorage.app
-            messagingSenderId: "479705625954",
-            appId: "1:479705625954:web:9bfd7b5c753dd643e2283b",
-            measurementId: "G-LJGGHDVYLB" // Optional
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // --- DOM Elements ---
-        const authContainer = document.getElementById('authContainer');
-        const loginForm = document.getElementById('loginForm');
-        const signupForm = document.getElementById('signupForm');
-        const switchToSignup = document.getElementById('switchToSignup');
-        const switchToLogin = document.getElementById('switchToLogin');
-
-        const dashboardContainer = document.getElementById('dashboardContainer');
-        const userEmailDisplay = document.getElementById('userEmailDisplay');
-        const logoutButton = document.getElementById('logoutButton');
-        
-        const messagePopup = document.createElement('div');
-        messagePopup.className = 'message-popup';
-        document.body.appendChild(messagePopup);
-
-        // --- Utility Functions ---
-        function showMessage(message, type = 'success', duration = 3000) {
-            messagePopup.textContent = message;
-            messagePopup.className = `message-popup ${type} show`; // Add 'show' class
-            setTimeout(() => {
-                messagePopup.classList.remove('show');
-            }, duration);
-        }
-        
-        // --- Auth State Observer ---
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // User is signed in
-                console.log("User signed in:", user.email);
-                authContainer.classList.add('hidden');
-                dashboardContainer.classList.remove('hidden');
-                userEmailDisplay.textContent = user.email;
-                // (We will load user's links here in a later step)
-            } else {
-                // User is signed out
-                console.log("User signed out");
-                authContainer.classList.remove('hidden');
-                dashboardContainer.classList.add('hidden');
-                userEmailDisplay.textContent = '';
-                // Clear any sensitive dashboard data if necessary
-            }
-        });
-
-        // --- Event Listeners (will be implemented in Step 2) ---
-        // Login Form
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            // Login logic will go here in Step 2
-            showMessage('Login functionality to be implemented.', 'error');
-        });
-
-        // Signup Form
-        signupForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            // Signup logic will go here in Step 2
-            showMessage('Signup functionality to be implemented.', 'error');
-        });
-        
-        // Logout Button
-        logoutButton.addEventListener('click', async () => {
-            // Logout logic will go here in Step 2
-            showMessage('Logout functionality to be implemented.', 'error');
-        });
-
-        // Switch between Login and Signup forms
-        switchToSignup.addEventListener('click', (e) => {
-            e.preventDefault();
-            loginForm.classList.add('hidden');
-            signupForm.classList.remove('hidden');
-        });
-
-        switchToLogin.addEventListener('click', (e) => {
-            e.preventDefault();
-            signupForm.classList.add('hidden');
-            loginForm.classList.remove('hidden');
-        });
-
-        // Make functions globally accessible for now if needed, or keep them module-scoped
-        window.auth = auth; // For debugging or direct calls if necessary
-        window.db = db;     // For debugging or direct calls if necessary
-    </script>
 
     <div id="authContainer" class="w-full">
         <form id="loginForm" class="form-container mx-auto bg-white p-8 rounded-lg shadow-xl">
@@ -224,5 +120,190 @@
         </div>
     </div>
 
+    <div class="message-popup"></div>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
+        import { 
+            getAuth, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            onAuthStateChanged, 
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js"; // Firestore will be used in Step 3
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", // Your actual API key
+            authDomain: "dynamic-qr-bb507.firebaseapp.com",
+            projectId: "dynamic-qr-bb507",
+            storageBucket: "dynamic-qr-bb507.firebasestorage.app",
+            messagingSenderId: "479705625954",
+            appId: "1:479705625954:web:9bfd7b5c753dd643e2283b",
+            measurementId: "G-LJGGHDVYLB" // Optional
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app); // Initialize Firestore (will be used more in Step 3)
+
+        // Wait for the DOM to be fully loaded before interacting with elements
+        // While placing the script at the end of the body often suffices,
+        // DOMContentLoaded is a good safeguard, especially with module scripts.
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const authContainer = document.getElementById('authContainer');
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            const switchToSignup = document.getElementById('switchToSignup');
+            const switchToLogin = document.getElementById('switchToLogin');
+
+            const dashboardContainer = document.getElementById('dashboardContainer');
+            const userEmailDisplay = document.getElementById('userEmailDisplay');
+            const logoutButton = document.getElementById('logoutButton');
+            
+            // Ensure messagePopup is correctly selected or created after DOM is ready
+            let messagePopup = document.body.querySelector('.message-popup');
+            // If it wasn't in the HTML, this would create it, but we added it.
+            // if (!messagePopup) {
+            //     messagePopup = document.createElement('div');
+            //     messagePopup.className = 'message-popup';
+            //     document.body.appendChild(messagePopup);
+            // }
+
+            // --- Utility Functions ---
+            function showMessage(message, type = 'success', duration = 3000) {
+                if (!messagePopup) { 
+                    console.error("Message popup element not found in DOM.");
+                    return;
+                }
+                messagePopup.textContent = message;
+                messagePopup.className = `message-popup ${type} show`; // Add 'show' class
+                setTimeout(() => {
+                    messagePopup.classList.remove('show');
+                }, duration);
+            }
+            
+            // --- Auth State Observer ---
+            if (authContainer && dashboardContainer && userEmailDisplay) {
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        // User is signed in
+                        console.log("User signed in:", user.email);
+                        authContainer.classList.add('hidden');
+                        dashboardContainer.classList.remove('hidden');
+                        userEmailDisplay.textContent = user.email;
+                        // (We will load user's links here in Step 3)
+                    } else {
+                        // User is signed out
+                        console.log("User signed out");
+                        authContainer.classList.remove('hidden');
+                        dashboardContainer.classList.add('hidden');
+                        userEmailDisplay.textContent = '';
+                        const linksList = document.getElementById('linksList');
+                        if (linksList) {
+                            linksList.innerHTML = '<p class="text-gray-500">Please log in to see your links.</p>';
+                        }
+                    }
+                });
+            } else {
+                console.error("Essential DOM elements for auth state changes are missing. Check IDs: authContainer, dashboardContainer, userEmailDisplay");
+            }
+
+            // --- Event Listeners for Authentication ---
+
+            if (loginForm) {
+                loginForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const email = loginForm.loginEmail.value;
+                    const password = loginForm.loginPassword.value;
+
+                    if (!email || !password) {
+                        showMessage('Please enter both email and password.', 'error');
+                        return;
+                    }
+                    try {
+                        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                        console.log('User logged in:', userCredential.user);
+                        showMessage('Login successful!', 'success');
+                        loginForm.reset(); 
+                    } catch (error) {
+                        console.error('Login error:', error);
+                        showMessage(`Login failed: ${error.message}`, 'error', 5000);
+                    }
+                });
+            } else {
+                console.error("Login form not found. Check ID: loginForm");
+            }
+
+            if (signupForm) {
+                signupForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const email = signupForm.signupEmail.value;
+                    const password = signupForm.signupPassword.value;
+
+                    if (!email || !password) {
+                        showMessage('Please enter both email and password.', 'error');
+                        return;
+                    }
+                    if (password.length < 6) {
+                        showMessage('Password should be at least 6 characters long.', 'error');
+                        return;
+                    }
+                    try {
+                        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                        console.log('User signed up:', userCredential.user);
+                        showMessage('Signup successful! You are now logged in.', 'success');
+                        signupForm.reset();
+                    } catch (error) {
+                        console.error('Signup error:', error);
+                        showMessage(`Signup failed: ${error.message}`, 'error', 5000);
+                    }
+                });
+            } else {
+                console.error("Signup form not found. Check ID: signupForm");
+            }
+            
+            if (logoutButton) {
+                logoutButton.addEventListener('click', async () => {
+                    try {
+                        await signOut(auth);
+                        console.log('User logged out');
+                        showMessage('Logout successful!', 'success');
+                    } catch (error) {
+                        console.error('Logout error:', error);
+                        showMessage(`Logout failed: ${error.message}`, 'error');
+                    }
+                });
+            } else {
+                console.error("Logout button not found. Check ID: logoutButton");
+            }
+
+            if (switchToSignup && loginForm && signupForm) {
+                switchToSignup.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    loginForm.classList.add('hidden');
+                    signupForm.classList.remove('hidden');
+                    loginForm.reset(); 
+                });
+            } else {
+                console.error("Switch to Signup button or related forms not found. Check IDs: switchToSignup, loginForm, signupForm");
+            }
+
+            if (switchToLogin && loginForm && signupForm) {
+                switchToLogin.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    signupForm.classList.add('hidden');
+                    loginForm.classList.remove('hidden');
+                    signupForm.reset(); 
+                });
+            } else {
+                console.error("Switch to Login button or related forms not found. Check IDs: switchToLogin, loginForm, signupForm");
+            }
+        }); // End of DOMContentLoaded
+    </script>
 </body>
 </html>
