@@ -59,6 +59,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
         import { getFirestore, collection, query, where, getDocs, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 
+        // Your web app's Firebase configuration (Same as in index.html)
         const firebaseConfig = {
             apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", 
             authDomain: "dynamic-qr-bb507.firebaseapp.com",
@@ -66,9 +67,10 @@
             storageBucket: "dynamic-qr-bb507.firebasestorage.app",
             messagingSenderId: "479705625954",
             appId: "1:479705625954:web:9bfd7b5c753dd643e2283b",
-            measurementId: "G-LJGGHDVYLB"
+            measurementId: "G-LJGGHDVYLB" // Optional
         };
 
+        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const messageElement = document.getElementById('message');
@@ -87,35 +89,37 @@
                 return;
             }
 
-            messageElement.textContent = `Searching for link: ${shortCode}...`;
+            // Update UI immediately (optional, but can make it feel faster)
+            // messageElement.textContent = `Redirecting...`; 
 
             try {
                 const linksRef = collection(db, "links");
                 const q = query(linksRef, where("shortCode", "==", shortCode));
-                const querySnapshot = await getDocs(q);
+                const querySnapshot = await getDocs(q); // This read operation still needs to complete
 
                 if (!querySnapshot.empty) {
                     const linkDocSnapshot = querySnapshot.docs[0];
                     const linkData = linkDocSnapshot.data();
                     const linkId = linkDocSnapshot.id;
                     
-                    messageElement.textContent = `Redirecting to: ${linkData.originalUrl}`;
-
-                    // Increment click count (best effort, don't block redirect for this)
-                    try {
-                        const linkDocRef = doc(db, "links", linkId);
-                        await updateDoc(linkDocRef, {
-                            clickCount: increment(1), // Atomically increment the clickCount
-                            lastClicked: new Date() // Optionally, store last clicked time
-                        });
-                        console.log(`Click count updated for ${shortCode}`);
-                    } catch (clickError) {
-                        console.error("Error updating click count:", clickError);
-                        // Don't let this error stop the redirect
-                    }
-                    
-                    // Perform the redirect
+                    // Initiate redirect immediately
                     window.location.href = linkData.originalUrl;
+                    
+                    // Update click count in the background (fire and forget)
+                    // No 'await' here, so the redirect doesn't wait for this to finish
+                    const linkDocRef = doc(db, "links", linkId);
+                    updateDoc(linkDocRef, {
+                        clickCount: increment(1),
+                        lastClicked: new Date() 
+                    }).then(() => {
+                        console.log(`Click count updated for ${shortCode}`);
+                    }).catch((clickError) => {
+                        console.error("Error updating click count (background):", clickError);
+                        // Log error, but don't interrupt user who has already been redirected
+                    });
+
+                    // Since redirect is initiated, the user might not see these messages.
+                    // messageElement.textContent = `Redirecting to: ${linkData.originalUrl}`;
 
                 } else {
                     messageElement.textContent = "Link Not Found";
