@@ -6,6 +6,7 @@
     <title>Dynamic QR Linker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .form-container { max-width: 400px; }
@@ -30,6 +31,28 @@
         }
         .message-popup.success { background-color: #28a745; } /* Green */
         .message-popup.error { background-color: #dc3545; } /* Red */
+
+        /* Style for the QR code canvas */
+        .qr-code-container {
+            display: flex; /* Use flex to center content if needed */
+            justify-content: center; /* Center horizontally */
+            align-items: center; /* Center vertically */
+            padding: 10px;
+            min-height: 120px; /* Ensure space for QR code */
+        }
+        .qr-code-container canvas { 
+            display: block;
+            border: 1px solid #e5e7eb; /* light gray border */
+            padding: 5px;
+            background-color: white;
+            border-radius: 4px;
+        }
+        .link-item {
+            transition: box-shadow 0.3s ease-in-out;
+        }
+        .link-item:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col items-center justify-center p-4">
@@ -97,25 +120,7 @@
         <div id="linksListContainer">
             <h2 class="text-xl font-semibold mb-4 text-gray-700">Your Links</h2>
             <div id="linksList" class="space-y-4">
-                <!-- 
-                <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <h3 class="font-semibold text-lg text-indigo-600">Link Name / Short URL</h3>
-                            <p class="text-sm text-gray-500 truncate">Original URL: https://very-long-original-url.com/with/lots/of/parameters</p>
-                            <p class="text-sm text-blue-500">Short Link: yourdomain.com/r/?id=xxxxxx</p>
-                        </div>
-                        <div class="flex-shrink-0 ml-4">
-                            QR Code Image
-                        </div>
-                    </div>
-                    <div class="mt-2 flex space-x-2">
-                        <button class="text-sm text-blue-500 hover:underline">Edit</button>
-                        <button class="text-sm text-red-500 hover:underline">Delete</button>
-                    </div>
-                </div> 
-                -->
-                <p class="text-gray-500">You haven't created any links yet. Use the form above to get started!</p>
+                <p class="text-gray-500" id="noLinksMessage">You haven't created any links yet. Use the form above to get started!</p>
             </div>
         </div>
     </div>
@@ -123,7 +128,6 @@
     <div class="message-popup"></div>
 
     <script type="module">
-        // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
         import { 
             getAuth, 
@@ -132,29 +136,34 @@
             onAuthStateChanged, 
             signOut 
         } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js"; // Firestore will be used in Step 3
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            query, 
+            where, 
+            getDocs, 
+            serverTimestamp, 
+            doc, 
+            deleteDoc,
+            // updateDoc // For future edit functionality
+        } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
-            apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", // Your actual API key
+            apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", 
             authDomain: "dynamic-qr-bb507.firebaseapp.com",
             projectId: "dynamic-qr-bb507",
             storageBucket: "dynamic-qr-bb507.firebasestorage.app",
             messagingSenderId: "479705625954",
             appId: "1:479705625954:web:9bfd7b5c753dd643e2283b",
-            measurementId: "G-LJGGHDVYLB" // Optional
+            measurementId: "G-LJGGHDVYLB"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app); // Initialize Firestore (will be used more in Step 3)
+        const db = getFirestore(app);
 
-        // Wait for the DOM to be fully loaded before interacting with elements
-        // While placing the script at the end of the body often suffices,
-        // DOMContentLoaded is a good safeguard, especially with module scripts.
         document.addEventListener('DOMContentLoaded', () => {
-            // --- DOM Elements ---
             const authContainer = document.getElementById('authContainer');
             const loginForm = document.getElementById('loginForm');
             const signupForm = document.getElementById('signupForm');
@@ -165,143 +174,262 @@
             const userEmailDisplay = document.getElementById('userEmailDisplay');
             const logoutButton = document.getElementById('logoutButton');
             
-            // Ensure messagePopup is correctly selected or created after DOM is ready
-            let messagePopup = document.body.querySelector('.message-popup');
-            // If it wasn't in the HTML, this would create it, but we added it.
-            // if (!messagePopup) {
-            //     messagePopup = document.createElement('div');
-            //     messagePopup.className = 'message-popup';
-            //     document.body.appendChild(messagePopup);
-            // }
+            const createLinkForm = document.getElementById('createLinkForm');
+            const linksListDiv = document.getElementById('linksList');
+            const noLinksMessage = document.getElementById('noLinksMessage');
 
-            // --- Utility Functions ---
+            let messagePopup = document.body.querySelector('.message-popup');
+
             function showMessage(message, type = 'success', duration = 3000) {
-                if (!messagePopup) { 
-                    console.error("Message popup element not found in DOM.");
-                    return;
-                }
+                if (!messagePopup) { console.error("Message popup element not found."); return; }
                 messagePopup.textContent = message;
-                messagePopup.className = `message-popup ${type} show`; // Add 'show' class
-                setTimeout(() => {
-                    messagePopup.classList.remove('show');
-                }, duration);
+                messagePopup.className = `message-popup ${type} show`;
+                setTimeout(() => { messagePopup.classList.remove('show'); }, duration);
             }
             
+            // --- Short Code Generation ---
+            function generateShortCode(length = 6) {
+                const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                let result = '';
+                for (let i = 0; i < length; i++) {
+                    result += characters.charAt(Math.floor(Math.random() * characters.length));
+                }
+                return result;
+            }
+
+            async function isShortCodeUnique(shortCode) {
+                const linksRef = collection(db, "links");
+                const q = query(linksRef, where("shortCode", "==", shortCode));
+                const querySnapshot = await getDocs(q);
+                return querySnapshot.empty; // True if no documents found (unique)
+            }
+
+            // --- Link Rendering ---
+            function renderLinkItem(linkData) {
+                if (noLinksMessage) noLinksMessage.classList.add('hidden');
+
+                const linkItem = document.createElement('div');
+                linkItem.className = 'link-item bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col md:flex-row justify-between items-center space-y-3 md:space-y-0 md:space-x-4';
+                linkItem.setAttribute('data-id', linkData.id);
+
+                const linkInfo = document.createElement('div');
+                linkInfo.className = 'flex-grow';
+                
+                const linkNameH3 = document.createElement('h3');
+                linkNameH3.className = 'font-semibold text-lg text-indigo-600 break-all';
+                linkNameH3.textContent = linkData.linkName || 'Untitled Link';
+                
+                const originalUrlP = document.createElement('p');
+                originalUrlP.className = 'text-sm text-gray-500 truncate';
+                originalUrlP.innerHTML = `Original: <a href="${linkData.originalUrl}" target="_blank" class="hover:underline">${linkData.originalUrl}</a>`;
+                
+                const shortLinkP = document.createElement('p');
+                shortLinkP.className = 'text-sm text-blue-500 font-medium';
+                // Construct the short URL based on your domain. For local testing, it's relative.
+                // For a live site, it would be e.g., https://yourdomain.com/r/?id=${linkData.shortCode}
+                const shortUrl = `${window.location.origin}/r/?id=${linkData.shortCode}`;
+                shortLinkP.innerHTML = `Short Link: <a href="${shortUrl}" target="_blank" class="hover:underline">${shortUrl}</a>`;
+
+                linkInfo.appendChild(linkNameH3);
+                linkInfo.appendChild(originalUrlP);
+                linkInfo.appendChild(shortLinkP);
+
+                const qrCodeActionsDiv = document.createElement('div');
+                qrCodeActionsDiv.className = 'flex flex-col items-center space-y-2 md:items-end';
+
+                const qrCodeContainer = document.createElement('div');
+                qrCodeContainer.className = 'qr-code-container'; // For styling the QR code
+                // Generate QR Code
+                new QRCode(qrCodeContainer, {
+                    text: shortUrl,
+                    width: 100,
+                    height: 100,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'mt-2 flex space-x-2';
+                
+                // Delete Button
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'text-sm text-red-500 hover:text-red-700 hover:underline focus:outline-none';
+                deleteButton.textContent = 'Delete';
+                deleteButton.onclick = async () => {
+                    if (confirm('Are you sure you want to delete this link?')) {
+                        try {
+                            await deleteDoc(doc(db, "links", linkData.id));
+                            showMessage('Link deleted successfully!', 'success');
+                            loadUserLinks(); // Refresh the list
+                        } catch (error) {
+                            console.error("Error deleting link:", error);
+                            showMessage(`Error deleting link: ${error.message}`, 'error');
+                        }
+                    }
+                };
+                actionsDiv.appendChild(deleteButton);
+                // (Edit button can be added here later)
+
+                qrCodeActionsDiv.appendChild(qrCodeContainer);
+                qrCodeActionsDiv.appendChild(actionsDiv);
+                
+                linkItem.appendChild(linkInfo);
+                linkItem.appendChild(qrCodeActionsDiv);
+                linksListDiv.appendChild(linkItem);
+            }
+
+            // --- Load User Links ---
+            async function loadUserLinks() {
+                if (!auth.currentUser) return;
+                linksListDiv.innerHTML = ''; // Clear existing links
+                if (noLinksMessage) noLinksMessage.classList.remove('hidden'); // Show initially
+
+                const userId = auth.currentUser.uid;
+                const linksRef = collection(db, "links");
+                const q = query(linksRef, where("userId", "==", userId)); // Consider adding orderBy("createdAt", "desc") later
+
+                try {
+                    const querySnapshot = await getDocs(q);
+                    if (querySnapshot.empty && noLinksMessage) {
+                        noLinksMessage.classList.remove('hidden');
+                    } else {
+                        if (noLinksMessage) noLinksMessage.classList.add('hidden');
+                        querySnapshot.forEach((doc) => {
+                            renderLinkItem({ id: doc.id, ...doc.data() });
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error loading links:", error);
+                    showMessage(`Error loading links: ${error.message}`, 'error');
+                    if (noLinksMessage) noLinksMessage.classList.remove('hidden'); // Show if error
+                }
+            }
+
             // --- Auth State Observer ---
             if (authContainer && dashboardContainer && userEmailDisplay) {
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        // User is signed in
                         console.log("User signed in:", user.email);
                         authContainer.classList.add('hidden');
                         dashboardContainer.classList.remove('hidden');
                         userEmailDisplay.textContent = user.email;
-                        // (We will load user's links here in Step 3)
+                        loadUserLinks(); // Load links when user signs in
                     } else {
-                        // User is signed out
                         console.log("User signed out");
                         authContainer.classList.remove('hidden');
                         dashboardContainer.classList.add('hidden');
                         userEmailDisplay.textContent = '';
-                        const linksList = document.getElementById('linksList');
-                        if (linksList) {
-                            linksList.innerHTML = '<p class="text-gray-500">Please log in to see your links.</p>';
+                        linksListDiv.innerHTML = ''; // Clear links
+                        if (noLinksMessage) {
+                             noLinksMessage.classList.remove('hidden');
+                             noLinksMessage.textContent = 'Please log in to see your links.';
                         }
                     }
                 });
             } else {
-                console.error("Essential DOM elements for auth state changes are missing. Check IDs: authContainer, dashboardContainer, userEmailDisplay");
+                console.error("Essential DOM elements for auth state changes are missing.");
             }
 
-            // --- Event Listeners for Authentication ---
-
+            // --- Event Listeners ---
+            // Login, Signup, Logout (from Step 2 - ensure they are here)
             if (loginForm) {
-                loginForm.addEventListener('submit', async (e) => {
+                loginForm.addEventListener('submit', async (e) => { /* ... (existing login logic) ... */ 
                     e.preventDefault();
                     const email = loginForm.loginEmail.value;
                     const password = loginForm.loginPassword.value;
-
-                    if (!email || !password) {
-                        showMessage('Please enter both email and password.', 'error');
-                        return;
-                    }
+                    if (!email || !password) { showMessage('Please enter both email and password.', 'error'); return; }
                     try {
-                        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-                        console.log('User logged in:', userCredential.user);
-                        showMessage('Login successful!', 'success');
-                        loginForm.reset(); 
-                    } catch (error) {
-                        console.error('Login error:', error);
-                        showMessage(`Login failed: ${error.message}`, 'error', 5000);
-                    }
+                        await signInWithEmailAndPassword(auth, email, password);
+                        showMessage('Login successful!', 'success'); loginForm.reset(); 
+                    } catch (error) { showMessage(`Login failed: ${error.message}`, 'error', 5000); }
                 });
-            } else {
-                console.error("Login form not found. Check ID: loginForm");
             }
-
             if (signupForm) {
-                signupForm.addEventListener('submit', async (e) => {
+                signupForm.addEventListener('submit', async (e) => { /* ... (existing signup logic) ... */ 
                     e.preventDefault();
                     const email = signupForm.signupEmail.value;
                     const password = signupForm.signupPassword.value;
-
-                    if (!email || !password) {
-                        showMessage('Please enter both email and password.', 'error');
-                        return;
-                    }
-                    if (password.length < 6) {
-                        showMessage('Password should be at least 6 characters long.', 'error');
-                        return;
-                    }
+                    if (!email || !password) { showMessage('Please enter both email and password.', 'error'); return; }
+                    if (password.length < 6) { showMessage('Password should be at least 6 characters long.', 'error'); return; }
                     try {
-                        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                        console.log('User signed up:', userCredential.user);
-                        showMessage('Signup successful! You are now logged in.', 'success');
-                        signupForm.reset();
-                    } catch (error) {
-                        console.error('Signup error:', error);
-                        showMessage(`Signup failed: ${error.message}`, 'error', 5000);
-                    }
+                        await createUserWithEmailAndPassword(auth, email, password);
+                        showMessage('Signup successful! You are now logged in.', 'success'); signupForm.reset();
+                    } catch (error) { showMessage(`Signup failed: ${error.message}`, 'error', 5000); }
                 });
-            } else {
-                console.error("Signup form not found. Check ID: signupForm");
             }
-            
             if (logoutButton) {
-                logoutButton.addEventListener('click', async () => {
+                logoutButton.addEventListener('click', async () => { /* ... (existing logout logic) ... */ 
+                    try { await signOut(auth); showMessage('Logout successful!', 'success');
+                    } catch (error) { showMessage(`Logout failed: ${error.message}`, 'error'); }
+                });
+            }
+            if (switchToSignup && loginForm && signupForm) {
+                switchToSignup.addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); signupForm.classList.remove('hidden'); loginForm.reset(); });
+            }
+            if (switchToLogin && loginForm && signupForm) {
+                switchToLogin.addEventListener('click', (e) => { e.preventDefault(); signupForm.classList.add('hidden'); loginForm.classList.remove('hidden'); signupForm.reset(); });
+            }
+
+            // Create Link Form
+            if (createLinkForm) {
+                createLinkForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    if (!auth.currentUser) {
+                        showMessage('You must be logged in to create links.', 'error');
+                        return;
+                    }
+
+                    const destinationUrl = createLinkForm.destinationUrl.value;
+                    const linkName = createLinkForm.linkName.value.trim(); // Optional
+
+                    if (!destinationUrl) {
+                        showMessage('Destination URL is required.', 'error');
+                        return;
+                    }
+                    // Basic URL validation (can be more robust)
                     try {
-                        await signOut(auth);
-                        console.log('User logged out');
-                        showMessage('Logout successful!', 'success');
+                        new URL(destinationUrl);
+                    } catch (_) {
+                        showMessage('Invalid Destination URL format.', 'error');
+                        return;
+                    }
+
+
+                    let newShortCode = generateShortCode();
+                    let attempts = 0;
+                    const maxAttempts = 10; // Prevent infinite loop in rare case of many collisions
+                    while (!(await isShortCodeUnique(newShortCode)) && attempts < maxAttempts) {
+                        newShortCode = generateShortCode();
+                        attempts++;
+                    }
+
+                    if (attempts >= maxAttempts) {
+                        showMessage('Could not generate a unique short code. Please try again.', 'error');
+                        console.error("Failed to generate unique short code after multiple attempts.");
+                        return;
+                    }
+
+                    try {
+                        const linksCollectionRef = collection(db, "links");
+                        await addDoc(linksCollectionRef, {
+                            userId: auth.currentUser.uid,
+                            originalUrl: destinationUrl,
+                            linkName: linkName || null, // Store null if empty
+                            shortCode: newShortCode,
+                            createdAt: serverTimestamp(),
+                            clickCount: 0 // Initialize click count
+                        });
+                        showMessage('Link created successfully!', 'success');
+                        createLinkForm.reset();
+                        loadUserLinks(); // Refresh the list
                     } catch (error) {
-                        console.error('Logout error:', error);
-                        showMessage(`Logout failed: ${error.message}`, 'error');
+                        console.error("Error creating link:", error);
+                        showMessage(`Error creating link: ${error.message}`, 'error');
                     }
                 });
             } else {
-                console.error("Logout button not found. Check ID: logoutButton");
-            }
-
-            if (switchToSignup && loginForm && signupForm) {
-                switchToSignup.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    loginForm.classList.add('hidden');
-                    signupForm.classList.remove('hidden');
-                    loginForm.reset(); 
-                });
-            } else {
-                console.error("Switch to Signup button or related forms not found. Check IDs: switchToSignup, loginForm, signupForm");
-            }
-
-            if (switchToLogin && loginForm && signupForm) {
-                switchToLogin.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    signupForm.classList.add('hidden');
-                    loginForm.classList.remove('hidden');
-                    signupForm.reset(); 
-                });
-            } else {
-                console.error("Switch to Login button or related forms not found. Check IDs: switchToLogin, loginForm, signupForm");
+                console.error("Create Link form not found. Check ID: createLinkForm");
             }
         }); // End of DOMContentLoaded
     </script>

@@ -51,80 +51,87 @@
 <body>
     <div class="container">
         <h1>Hold Tight!</h1>
-        <p id="message">We're redirecting you to your destination...</p>
+        <p id="message">We're preparing your link...</p>
         <div class="loader"></div>
         <p id="errorMessage" style="color: #d93025; display: none;"></p> </div>
 
     <script type="module">
-        // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
-        import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+        import { getFirestore, collection, query, where, getDocs, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 
-        // Your web app's Firebase configuration (Same as in index.html)
         const firebaseConfig = {
-            apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", // Replace with your actual API key if different
+            apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", 
             authDomain: "dynamic-qr-bb507.firebaseapp.com",
             projectId: "dynamic-qr-bb507",
             storageBucket: "dynamic-qr-bb507.firebasestorage.app",
             messagingSenderId: "479705625954",
             appId: "1:479705625954:web:9bfd7b5c753dd643e2283b",
-            measurementId: "G-LJGGHDVYLB" // Optional
+            measurementId: "G-LJGGHDVYLB"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const messageElement = document.getElementById('message');
         const errorMessageElement = document.getElementById('errorMessage');
+        const loaderElement = document.querySelector('.loader');
 
-        // --- Redirect Logic (will be fully implemented in Step 4) ---
         async function handleRedirect() {
             const params = new URLSearchParams(window.location.search);
-            const shortCode = params.get('id'); // Assuming URL is yourdomain.com/r/?id=SHORTCODE
+            const shortCode = params.get('id');
 
             if (!shortCode) {
-                messageElement.textContent = "Invalid link.";
-                errorMessageElement.textContent = "No short code provided in the URL.";
+                messageElement.textContent = "Invalid Link";
+                errorMessageElement.textContent = "No short code provided in the URL. Please check the link and try again.";
                 errorMessageElement.style.display = 'block';
-                document.querySelector('.loader').style.display = 'none';
+                if(loaderElement) loaderElement.style.display = 'none';
                 return;
             }
 
-            messageElement.textContent = `Looking for link: ${shortCode}...`;
+            messageElement.textContent = `Searching for link: ${shortCode}...`;
 
-            // In Step 4, we will query Firestore for this shortCode
-            // For now, this is a placeholder:
-            console.log(`Attempting to redirect for shortCode: ${shortCode}`);
-            errorMessageElement.textContent = "Redirect functionality will be implemented in Step 4. Currently, this page only shows the short code.";
-            errorMessageElement.style.display = 'block';
-            // document.querySelector('.loader').style.display = 'none'; // Keep loader for now
-            
-            // Example (actual Firestore query will be in Step 4):
-            // try {
-            //     const linksRef = collection(db, "links");
-            //     const q = query(linksRef, where("shortCode", "==", shortCode));
-            //     const querySnapshot = await getDocs(q);
+            try {
+                const linksRef = collection(db, "links");
+                const q = query(linksRef, where("shortCode", "==", shortCode));
+                const querySnapshot = await getDocs(q);
 
-            //     if (!querySnapshot.empty) {
-            //         const linkDoc = querySnapshot.docs[0].data();
-            //         messageElement.textContent = `Redirecting to: ${linkDoc.originalUrl}`;
-            //         window.location.href = linkDoc.originalUrl;
-            //     } else {
-            //         messageElement.textContent = "Link not found.";
-            //         errorMessageElement.textContent = `The short link "${shortCode}" does not exist or has expired.`;
-            //         errorMessageElement.style.display = 'block';
-            //         document.querySelector('.loader').style.display = 'none';
-            //     }
-            // } catch (error) {
-            //     console.error("Error fetching link:", error);
-            //     messageElement.textContent = "Error finding link.";
-            //     errorMessageElement.textContent = "An error occurred while trying to process your link. Please try again later.";
-            //     errorMessageElement.style.display = 'block';
-            //     document.querySelector('.loader').style.display = 'none';
-            // }
+                if (!querySnapshot.empty) {
+                    const linkDocSnapshot = querySnapshot.docs[0];
+                    const linkData = linkDocSnapshot.data();
+                    const linkId = linkDocSnapshot.id;
+                    
+                    messageElement.textContent = `Redirecting to: ${linkData.originalUrl}`;
+
+                    // Increment click count (best effort, don't block redirect for this)
+                    try {
+                        const linkDocRef = doc(db, "links", linkId);
+                        await updateDoc(linkDocRef, {
+                            clickCount: increment(1), // Atomically increment the clickCount
+                            lastClicked: new Date() // Optionally, store last clicked time
+                        });
+                        console.log(`Click count updated for ${shortCode}`);
+                    } catch (clickError) {
+                        console.error("Error updating click count:", clickError);
+                        // Don't let this error stop the redirect
+                    }
+                    
+                    // Perform the redirect
+                    window.location.href = linkData.originalUrl;
+
+                } else {
+                    messageElement.textContent = "Link Not Found";
+                    errorMessageElement.textContent = `The short link "${shortCode}" does not exist, may have been deleted, or has expired. Please verify the link.`;
+                    errorMessageElement.style.display = 'block';
+                    if(loaderElement) loaderElement.style.display = 'none';
+                }
+            } catch (error) {
+                console.error("Error fetching link:", error);
+                messageElement.textContent = "Error Processing Link";
+                errorMessageElement.textContent = "An unexpected error occurred while trying to process your link. Please try again later or contact support.";
+                errorMessageElement.style.display = 'block';
+                if(loaderElement) loaderElement.style.display = 'none';
+            }
         }
 
-        // Run the redirect function when the page loads
         handleRedirect();
     </script>
 </body>
