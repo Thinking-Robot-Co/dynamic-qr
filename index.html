@@ -153,294 +153,295 @@
     </div>
 
     <div class="message-popup"></div>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
+    import { 
+        getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
+        onAuthStateChanged, signOut 
+    } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+    import { 
+        getFirestore, collection, addDoc, query, where, getDocs, 
+        serverTimestamp, doc, deleteDoc, updateDoc 
+    } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
-        import { 
-            getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
-            onAuthStateChanged, signOut 
-        } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
-        import { 
-            getFirestore, collection, addDoc, query, where, getDocs, 
-            serverTimestamp, doc, deleteDoc, updateDoc 
-        } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+    const firebaseConfig = { /* ... Your Firebase Config ... */
+        apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", 
+        authDomain: "dynamic-qr-bb507.firebaseapp.com",
+        projectId: "dynamic-qr-bb507",
+        storageBucket: "dynamic-qr-bb507.firebasestorage.app",
+        messagingSenderId: "479705625954",
+        appId: "1:479705625954:web:9bfd7b5c753dd643e2283b",
+        measurementId: "G-LJGGHDVYLB"
+    };
 
-        const firebaseConfig = { /* ... Your Firebase Config ... */
-            apiKey: "AIzaSyC7zHDiTQqReFpPzph7M49o3560UGIl3u0", 
-            authDomain: "dynamic-qr-bb507.firebaseapp.com",
-            projectId: "dynamic-qr-bb507",
-            storageBucket: "dynamic-qr-bb507.firebasestorage.app",
-            messagingSenderId: "479705625954",
-            appId: "1:479705625954:web:9bfd7b5c753dd643e2283b",
-            measurementId: "G-LJGGHDVYLB"
-        };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+    document.addEventListener('DOMContentLoaded', () => {
+        // DOM Elements
+        const authContainer = document.getElementById('authContainer');
+        const loginForm = document.getElementById('loginForm');
+        const signupForm = document.getElementById('signupForm');
+        const switchToSignup = document.getElementById('switchToSignup');
+        const switchToLogin = document.getElementById('switchToLogin');
+        const dashboardContainer = document.getElementById('dashboardContainer');
+        const userEmailDisplay = document.getElementById('userEmailDisplay');
+        const logoutButton = document.getElementById('logoutButton');
+        const createLinkForm = document.getElementById('createLinkForm');
+        const linksListDiv = document.getElementById('linksList');
+        const noLinksMessage = document.getElementById('noLinksMessage');
 
-        document.addEventListener('DOMContentLoaded', () => {
-            // DOM Elements
-            const authContainer = document.getElementById('authContainer');
-            const loginForm = document.getElementById('loginForm');
-            const signupForm = document.getElementById('signupForm');
-            const switchToSignup = document.getElementById('switchToSignup');
-            const switchToLogin = document.getElementById('switchToLogin');
-            const dashboardContainer = document.getElementById('dashboardContainer');
-            const userEmailDisplay = document.getElementById('userEmailDisplay');
-            const logoutButton = document.getElementById('logoutButton');
-            const createLinkForm = document.getElementById('createLinkForm');
-            const linksListDiv = document.getElementById('linksList');
-            const noLinksMessage = document.getElementById('noLinksMessage');
+        // Edit Modal Elements
+        const editLinkModal = document.getElementById('editLinkModal');
+        const editLinkForm = document.getElementById('editLinkForm');
+        const closeEditModalBtn = document.getElementById('closeEditModalBtn');
+        const cancelEditBtn = document.getElementById('cancelEditBtn');
+        const editLinkIdInput = document.getElementById('editLinkId');
+        const editDestinationUrlInput = document.getElementById('editDestinationUrl');
+        const editLinkNameInput = document.getElementById('editLinkName');
+        const editModalTitle = document.getElementById('editModalTitle');
 
-            // Edit Modal Elements
-            const editLinkModal = document.getElementById('editLinkModal');
-            const editLinkForm = document.getElementById('editLinkForm');
-            const closeEditModalBtn = document.getElementById('closeEditModalBtn');
-            const cancelEditBtn = document.getElementById('cancelEditBtn');
-            const editLinkIdInput = document.getElementById('editLinkId');
-            const editDestinationUrlInput = document.getElementById('editDestinationUrl');
-            const editLinkNameInput = document.getElementById('editLinkName');
-            const editModalTitle = document.getElementById('editModalTitle');
+        let messagePopup = document.body.querySelector('.message-popup');
 
-
-            let messagePopup = document.body.querySelector('.message-popup');
-
-            function showMessage(message, type = 'success', duration = 3000) {
-                if (!messagePopup) { console.error("Message popup element not found."); return; }
-                messagePopup.textContent = message;
-                messagePopup.className = `message-popup ${type} show`;
-                setTimeout(() => { messagePopup.classList.remove('show'); }, duration);
+        function showMessage(message, type = 'success', duration = 3000) {
+            if (!messagePopup) { console.error("Message popup element not found."); return; }
+            messagePopup.textContent = message;
+            messagePopup.className = `message-popup ${type} show`;
+            setTimeout(() => { messagePopup.classList.remove('show'); }, duration);
+        }
+        
+        function generateShortCode(length = 6) {
+            const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * characters.length));
             }
+            return result;
+        }
+
+        async function isShortCodeUnique(shortCode) {
+            const linksRef = collection(db, "links");
+            const q = query(linksRef, where("shortCode", "==", shortCode));
+            const querySnapshot = await getDocs(q);
+            return querySnapshot.empty;
+        }
+
+        function openEditModal(link) {
+            editLinkIdInput.value = link.id;
+            editDestinationUrlInput.value = link.originalUrl;
+            editLinkNameInput.value = link.linkName || '';
+            editModalTitle.textContent = `Edit: ${link.linkName || link.shortCode}`;
+            if (editLinkModal) editLinkModal.classList.add('flex');
+        }
+
+        function closeEditModal() {
+            if (editLinkModal) editLinkModal.classList.remove('flex');
+            if (editLinkForm) editLinkForm.reset();
+        }
+
+        function renderLinkItem(linkData) {
+            if (noLinksMessage) noLinksMessage.classList.add('hidden');
+
+            const linkItem = document.createElement('div');
+            linkItem.className = 'link-item bg-white p-4 rounded-lg shadow flex flex-col md:flex-row justify-between items-start md:items-center space-y-3 md:space-y-0 md:space-x-4';
+            linkItem.setAttribute('data-id', linkData.id);
+
+            const linkInfo = document.createElement('div');
+            linkInfo.className = 'flex-grow min-w-0';
             
-            function generateShortCode(length = 6) { /* ... (same as before) ... */
-                const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-                let result = '';
-                for (let i = 0; i < length; i++) {
-                    result += characters.charAt(Math.floor(Math.random() * characters.length));
-                }
-                return result;
-            }
+            const linkNameH3 = document.createElement('h3');
+            linkNameH3.className = 'font-semibold text-lg text-indigo-600 break-words';
+            linkNameH3.textContent = linkData.linkName || 'Untitled Link';
+            
+            const originalUrlP = document.createElement('p');
+            originalUrlP.className = 'text-sm text-gray-500 truncate';
+            originalUrlP.title = linkData.originalUrl;
+            originalUrlP.innerHTML = `Original: <a href="${linkData.originalUrl}" target="_blank" class="hover:underline">${linkData.originalUrl}</a>`;
+            
+            // --- THIS IS THE MODIFIED LINE ---
+            const shortUrl = `${window.location.origin}/dynamic-qr/r/?id=${linkData.shortCode}`;
+            // --- END OF MODIFIED LINE ---
 
-            async function isShortCodeUnique(shortCode) { /* ... (same as before) ... */
-                const linksRef = collection(db, "links");
-                const q = query(linksRef, where("shortCode", "==", shortCode));
-                const querySnapshot = await getDocs(q);
-                return querySnapshot.empty;
-            }
+            const shortLinkP = document.createElement('p');
+            shortLinkP.className = 'text-sm text-blue-600 font-medium';
+            shortLinkP.innerHTML = `Short Link: <a href="${shortUrl}" target="_blank" class="hover:underline">${shortUrl}</a>`;
 
-            function openEditModal(link) {
-                editLinkIdInput.value = link.id;
-                editDestinationUrlInput.value = link.originalUrl;
-                editLinkNameInput.value = link.linkName || '';
-                editModalTitle.textContent = `Edit: ${link.linkName || link.shortCode}`;
-                editLinkModal.classList.add('flex');
-            }
+            const clickCountP = document.createElement('p');
+            clickCountP.className = 'text-xs text-gray-400 mt-1';
+            clickCountP.textContent = `Clicks: ${linkData.clickCount || 0}`;
 
-            function closeEditModal() {
-                editLinkModal.classList.remove('flex');
-                editLinkForm.reset();
-            }
+            linkInfo.appendChild(linkNameH3);
+            linkInfo.appendChild(originalUrlP);
+            linkInfo.appendChild(shortLinkP);
+            linkInfo.appendChild(clickCountP);
 
-            function renderLinkItem(linkData) {
-                if (noLinksMessage) noLinksMessage.classList.add('hidden');
+            const qrCodeActionsDiv = document.createElement('div');
+            qrCodeActionsDiv.className = 'flex flex-col items-center space-y-2 md:items-end md:ml-4 flex-shrink-0';
 
-                const linkItem = document.createElement('div');
-                linkItem.className = 'link-item bg-white p-4 rounded-lg shadow flex flex-col md:flex-row justify-between items-start md:items-center space-y-3 md:space-y-0 md:space-x-4';
-                linkItem.setAttribute('data-id', linkData.id);
-
-                const linkInfo = document.createElement('div');
-                linkInfo.className = 'flex-grow min-w-0'; // For better truncation
-                
-                const linkNameH3 = document.createElement('h3');
-                linkNameH3.className = 'font-semibold text-lg text-indigo-600 break-words'; // break-words
-                linkNameH3.textContent = linkData.linkName || 'Untitled Link';
-                
-                const originalUrlP = document.createElement('p');
-                originalUrlP.className = 'text-sm text-gray-500 truncate';
-                originalUrlP.title = linkData.originalUrl; // Show full URL on hover
-                originalUrlP.innerHTML = `Original: <a href="${linkData.originalUrl}" target="_blank" class="hover:underline">${linkData.originalUrl}</a>`;
-                
-                const shortUrl = `${window.location.origin}/r/?id=${linkData.shortCode}`;
-                const shortLinkP = document.createElement('p');
-                shortLinkP.className = 'text-sm text-blue-600 font-medium';
-                shortLinkP.innerHTML = `Short Link: <a href="${shortUrl}" target="_blank" class="hover:underline">${shortUrl}</a>`;
-
-                const clickCountP = document.createElement('p');
-                clickCountP.className = 'text-xs text-gray-400 mt-1';
-                clickCountP.textContent = `Clicks: ${linkData.clickCount || 0}`;
-
-                linkInfo.appendChild(linkNameH3);
-                linkInfo.appendChild(originalUrlP);
-                linkInfo.appendChild(shortLinkP);
-                linkInfo.appendChild(clickCountP);
-
-
-                const qrCodeActionsDiv = document.createElement('div');
-                qrCodeActionsDiv.className = 'flex flex-col items-center space-y-2 md:items-end md:ml-4 flex-shrink-0'; // flex-shrink-0
-
-                const qrCodeContainer = document.createElement('div');
-                qrCodeContainer.className = 'qr-code-container w-24 h-24 md:w-28 md:h-28'; // Fixed size for QR
+            const qrCodeContainer = document.createElement('div');
+            qrCodeContainer.className = 'qr-code-container w-24 h-24 md:w-28 md:h-28';
+            
+            // Ensure QRCode constructor is available (it's loaded in <head>)
+            if (typeof QRCode !== 'undefined') {
                 new QRCode(qrCodeContainer, {
-                    text: shortUrl, width: 90, height: 90, // Adjusted size
+                    text: shortUrl, width: 90, height: 90,
                     colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H
                 });
-
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'actions mt-2 flex space-x-2';
-                
-                const editButton = document.createElement('button');
-                editButton.className = 'text-xs py-1 px-2 rounded bg-blue-500 text-white hover:bg-blue-600';
-                editButton.textContent = 'Edit';
-                editButton.onclick = () => openEditModal(linkData);
-
-                const deleteButton = document.createElement('button');
-                deleteButton.className = 'text-xs py-1 px-2 rounded bg-red-500 text-white hover:bg-red-600';
-                deleteButton.textContent = 'Delete';
-                deleteButton.onclick = async () => { /* ... (same delete logic) ... */ 
-                    if (confirm('Are you sure you want to delete this link?')) {
-                        try {
-                            await deleteDoc(doc(db, "links", linkData.id));
-                            showMessage('Link deleted successfully!', 'success');
-                            loadUserLinks();
-                        } catch (error) { showMessage(`Error deleting link: ${error.message}`, 'error');}
-                    }
-                };
-                actionsDiv.appendChild(editButton);
-                actionsDiv.appendChild(deleteButton);
-
-                qrCodeActionsDiv.appendChild(qrCodeContainer);
-                qrCodeActionsDiv.appendChild(actionsDiv);
-                
-                linkItem.appendChild(linkInfo);
-                linkItem.appendChild(qrCodeActionsDiv);
-                linksListDiv.appendChild(linkItem);
+            } else {
+                qrCodeContainer.textContent = 'QR lib not loaded';
             }
 
-            async function loadUserLinks() { /* ... (same as before, ensures renderLinkItem is called) ... */
-                if (!auth.currentUser) return;
-                linksListDiv.innerHTML = ''; 
-                if (noLinksMessage) noLinksMessage.classList.remove('hidden'); 
 
-                const userId = auth.currentUser.uid;
-                const linksRef = collection(db, "links");
-                const q = query(linksRef, where("userId", "==", userId));
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'actions mt-2 flex space-x-2';
+            
+            const editButton = document.createElement('button');
+            editButton.className = 'text-xs py-1 px-2 rounded bg-blue-500 text-white hover:bg-blue-600';
+            editButton.textContent = 'Edit';
+            editButton.onclick = () => openEditModal(linkData);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'text-xs py-1 px-2 rounded bg-red-500 text-white hover:bg-red-600';
+            deleteButton.textContent = 'Delete';
+            deleteButton.onclick = async () => { 
+                if (confirm('Are you sure you want to delete this link?')) {
+                    try {
+                        await deleteDoc(doc(db, "links", linkData.id));
+                        showMessage('Link deleted successfully!', 'success');
+                        loadUserLinks();
+                    } catch (error) { showMessage(`Error deleting link: ${error.message}`, 'error');}
+                }
+            };
+            actionsDiv.appendChild(editButton);
+            actionsDiv.appendChild(deleteButton);
+
+            qrCodeActionsDiv.appendChild(qrCodeContainer);
+            qrCodeActionsDiv.appendChild(actionsDiv);
+            
+            linkItem.appendChild(linkInfo);
+            linkItem.appendChild(qrCodeActionsDiv);
+            if (linksListDiv) linksListDiv.appendChild(linkItem);
+        }
+
+        async function loadUserLinks() {
+            if (!auth.currentUser || !linksListDiv) return;
+            linksListDiv.innerHTML = ''; 
+            if (noLinksMessage) noLinksMessage.classList.remove('hidden'); 
+
+            const userId = auth.currentUser.uid;
+            const linksRef = collection(db, "links");
+            const q = query(linksRef, where("userId", "==", userId));
+
+            try {
+                const querySnapshot = await getDocs(q);
+                if (querySnapshot.empty && noLinksMessage) {
+                    noLinksMessage.classList.remove('hidden');
+                    noLinksMessage.textContent = "You haven't created any links yet. Use the form above to get started!";
+                } else {
+                    if (noLinksMessage) noLinksMessage.classList.add('hidden');
+                    querySnapshot.forEach((docSnap) => {
+                        renderLinkItem({ id: docSnap.id, ...docSnap.data() });
+                    });
+                }
+            } catch (error) {
+                console.error("Error loading links:", error);
+                showMessage(`Error loading links: ${error.message}`, 'error');
+                if (noLinksMessage) noLinksMessage.classList.remove('hidden');
+            }
+        }
+
+        // Auth State Change
+        if (authContainer && dashboardContainer && userEmailDisplay) {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    authContainer.classList.add('hidden');
+                    dashboardContainer.classList.remove('hidden');
+                    userEmailDisplay.textContent = user.email;
+                    loadUserLinks();
+                } else {
+                    authContainer.classList.remove('hidden');
+                    dashboardContainer.classList.add('hidden');
+                    userEmailDisplay.textContent = '';
+                    if (linksListDiv) linksListDiv.innerHTML = '';
+                    if (noLinksMessage) {
+                         noLinksMessage.classList.remove('hidden');
+                         noLinksMessage.textContent = 'Please log in to see your links.';
+                    }
+                }
+            });
+        }
+
+        // Event Listeners for Auth (Login, Signup, Logout, Switch forms)
+         if (loginForm) { loginForm.addEventListener('submit', async (e) => { e.preventDefault(); const email = loginForm.loginEmail.value; const password = loginForm.loginPassword.value; if (!email || !password) { showMessage('Please enter both email and password.', 'error'); return; } try { await signInWithEmailAndPassword(auth, email, password); showMessage('Login successful!', 'success'); loginForm.reset(); } catch (error) { showMessage(`Login failed: ${error.message}`, 'error', 5000); } }); }
+         if (signupForm) { signupForm.addEventListener('submit', async (e) => { e.preventDefault(); const email = signupForm.signupEmail.value; const password = signupForm.signupPassword.value; if (!email || !password) { showMessage('Please enter both email and password.', 'error'); return; } if (password.length < 6) { showMessage('Password should be at least 6 characters long.', 'error'); return; } try { await createUserWithEmailAndPassword(auth, email, password); showMessage('Signup successful! You are now logged in.', 'success'); signupForm.reset(); } catch (error) { showMessage(`Signup failed: ${error.message}`, 'error', 5000); } }); }
+         if (logoutButton) { logoutButton.addEventListener('click', async () => { try { await signOut(auth); showMessage('Logout successful!', 'success'); } catch (error) { showMessage(`Logout failed: ${error.message}`, 'error'); } }); }
+         if (switchToSignup && loginForm && signupForm) { switchToSignup.addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); signupForm.classList.remove('hidden'); loginForm.reset(); }); }
+         if (switchToLogin && loginForm && signupForm) { switchToLogin.addEventListener('click', (e) => { e.preventDefault(); signupForm.classList.add('hidden'); loginForm.classList.remove('hidden'); signupForm.reset(); }); }
+
+        // Create Link Form
+        if (createLinkForm) {
+            createLinkForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!auth.currentUser) { showMessage('You must be logged in.', 'error'); return; }
+                const destinationUrl = createLinkForm.destinationUrl.value;
+                const linkName = createLinkForm.linkName.value.trim();
+                if (!destinationUrl) { showMessage('Destination URL is required.', 'error'); return; }
+                try { new URL(destinationUrl); } catch (_) { showMessage('Invalid Destination URL.', 'error'); return;}
+                
+                let newShortCode = generateShortCode();
+                let attempts = 0; const maxAttempts = 10;
+                while (!(await isShortCodeUnique(newShortCode)) && attempts < maxAttempts) {
+                    newShortCode = generateShortCode(); attempts++;
+                }
+                if (attempts >= maxAttempts) { showMessage('Could not generate unique code.', 'error'); return; }
 
                 try {
-                    const querySnapshot = await getDocs(q);
-                    if (querySnapshot.empty && noLinksMessage) {
-                        noLinksMessage.classList.remove('hidden');
-                        noLinksMessage.textContent = "You haven't created any links yet. Use the form above to get started!";
-                    } else {
-                        if (noLinksMessage) noLinksMessage.classList.add('hidden');
-                        querySnapshot.forEach((docSnap) => {
-                            renderLinkItem({ id: docSnap.id, ...docSnap.data() });
-                        });
-                    }
+                    await addDoc(collection(db, "links"), {
+                        userId: auth.currentUser.uid, originalUrl: destinationUrl, linkName: linkName || null, 
+                        shortCode: newShortCode, createdAt: serverTimestamp(), clickCount: 0
+                    });
+                    showMessage('Link created successfully!', 'success'); createLinkForm.reset(); loadUserLinks();
+                } catch (error) { showMessage(`Error creating link: ${error.message}`, 'error'); }
+            });
+        }
+
+        // Edit Link Modal Logic
+        if (closeEditModalBtn) closeEditModalBtn.addEventListener('click', closeEditModal);
+        if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
+        if (editLinkForm) {
+            editLinkForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const linkId = editLinkIdInput.value;
+                const newDestinationUrl = editDestinationUrlInput.value;
+                const newLinkName = editLinkNameInput.value.trim();
+
+                if (!newDestinationUrl) { showMessage('New Destination URL is required.', 'error'); return; }
+                try { new URL(newDestinationUrl); } catch (_) { showMessage('Invalid New Destination URL format.', 'error'); return; }
+                if (!linkId) { showMessage('Error: Link ID is missing.', 'error'); return; }
+
+                try {
+                    const linkDocRef = doc(db, "links", linkId);
+                    await updateDoc(linkDocRef, {
+                        originalUrl: newDestinationUrl,
+                        linkName: newLinkName || null,
+                        updatedAt: serverTimestamp()
+                    });
+                    showMessage('Link updated successfully!', 'success');
+                    closeEditModal();
+                    loadUserLinks();
                 } catch (error) {
-                    console.error("Error loading links:", error);
-                    showMessage(`Error loading links: ${error.message}`, 'error');
-                    if (noLinksMessage) noLinksMessage.classList.remove('hidden');
+                    console.error("Error updating link:", error);
+                    showMessage(`Error updating link: ${error.message}`, 'error');
                 }
-            }
+            });
+        }
+        // Add null checks for all getElementById results before adding event listeners
+        // This is generally good practice, though DOMContentLoaded helps.
+        // Example: if (loginForm) loginForm.addEventListener(...)
+        // This is already done for most of them.
 
-            // Auth State Change (Login/Signup/Logout logic remains same as before)
-            if (authContainer && dashboardContainer && userEmailDisplay) {
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        authContainer.classList.add('hidden');
-                        dashboardContainer.classList.remove('hidden');
-                        userEmailDisplay.textContent = user.email;
-                        loadUserLinks();
-                    } else {
-                        authContainer.classList.remove('hidden');
-                        dashboardContainer.classList.add('hidden');
-                        userEmailDisplay.textContent = '';
-                        linksListDiv.innerHTML = '';
-                        if (noLinksMessage) {
-                             noLinksMessage.classList.remove('hidden');
-                             noLinksMessage.textContent = 'Please log in to see your links.';
-                        }
-                    }
-                });
-            }
-
-            // Event Listeners for Auth (Login, Signup, Logout, Switch forms - same as before)
-             if (loginForm) { loginForm.addEventListener('submit', async (e) => { e.preventDefault(); const email = loginForm.loginEmail.value; const password = loginForm.loginPassword.value; if (!email || !password) { showMessage('Please enter both email and password.', 'error'); return; } try { await signInWithEmailAndPassword(auth, email, password); showMessage('Login successful!', 'success'); loginForm.reset(); } catch (error) { showMessage(`Login failed: ${error.message}`, 'error', 5000); } }); }
-             if (signupForm) { signupForm.addEventListener('submit', async (e) => { e.preventDefault(); const email = signupForm.signupEmail.value; const password = signupForm.signupPassword.value; if (!email || !password) { showMessage('Please enter both email and password.', 'error'); return; } if (password.length < 6) { showMessage('Password should be at least 6 characters long.', 'error'); return; } try { await createUserWithEmailAndPassword(auth, email, password); showMessage('Signup successful! You are now logged in.', 'success'); signupForm.reset(); } catch (error) { showMessage(`Signup failed: ${error.message}`, 'error', 5000); } }); }
-             if (logoutButton) { logoutButton.addEventListener('click', async () => { try { await signOut(auth); showMessage('Logout successful!', 'success'); } catch (error) { showMessage(`Logout failed: ${error.message}`, 'error'); } }); }
-             if (switchToSignup && loginForm && signupForm) { switchToSignup.addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); signupForm.classList.remove('hidden'); loginForm.reset(); }); }
-             if (switchToLogin && loginForm && signupForm) { switchToLogin.addEventListener('click', (e) => { e.preventDefault(); signupForm.classList.add('hidden'); loginForm.classList.remove('hidden'); signupForm.reset(); }); }
-
-
-            // Create Link Form (same as before, with minor validation addition)
-            if (createLinkForm) {
-                createLinkForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    if (!auth.currentUser) { showMessage('You must be logged in.', 'error'); return; }
-                    const destinationUrl = createLinkForm.destinationUrl.value;
-                    const linkName = createLinkForm.linkName.value.trim();
-                    if (!destinationUrl) { showMessage('Destination URL is required.', 'error'); return; }
-                    try { new URL(destinationUrl); } catch (_) { showMessage('Invalid Destination URL.', 'error'); return;}
-                    
-                    let newShortCode = generateShortCode();
-                    let attempts = 0; const maxAttempts = 10;
-                    while (!(await isShortCodeUnique(newShortCode)) && attempts < maxAttempts) {
-                        newShortCode = generateShortCode(); attempts++;
-                    }
-                    if (attempts >= maxAttempts) { showMessage('Could not generate unique code.', 'error'); return; }
-
-                    try {
-                        await addDoc(collection(db, "links"), {
-                            userId: auth.currentUser.uid, originalUrl: destinationUrl, linkName: linkName || null, 
-                            shortCode: newShortCode, createdAt: serverTimestamp(), clickCount: 0
-                        });
-                        showMessage('Link created successfully!', 'success'); createLinkForm.reset(); loadUserLinks();
-                    } catch (error) { showMessage(`Error creating link: ${error.message}`, 'error'); }
-                });
-            }
-
-            // Edit Link Modal Logic
-            if (closeEditModalBtn) closeEditModalBtn.addEventListener('click', closeEditModal);
-            if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
-            if (editLinkForm) {
-                editLinkForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const linkId = editLinkIdInput.value;
-                    const newDestinationUrl = editDestinationUrlInput.value;
-                    const newLinkName = editLinkNameInput.value.trim();
-
-                    if (!newDestinationUrl) {
-                        showMessage('New Destination URL is required.', 'error');
-                        return;
-                    }
-                    try { new URL(newDestinationUrl); } catch (_) {
-                        showMessage('Invalid New Destination URL format.', 'error');
-                        return;
-                    }
-
-                    if (!linkId) {
-                        showMessage('Error: Link ID is missing.', 'error');
-                        return;
-                    }
-
-                    try {
-                        const linkDocRef = doc(db, "links", linkId);
-                        await updateDoc(linkDocRef, {
-                            originalUrl: newDestinationUrl,
-                            linkName: newLinkName || null,
-                            updatedAt: serverTimestamp() // Keep track of updates
-                        });
-                        showMessage('Link updated successfully!', 'success');
-                        closeEditModal();
-                        loadUserLinks(); // Refresh list
-                    } catch (error) {
-                        console.error("Error updating link:", error);
-                        showMessage(`Error updating link: ${error.message}`, 'error');
-                    }
-                });
-            }
-        });
-    </script>
+    }); // End of DOMContentLoaded
+</script>
 </body>
 </html>
